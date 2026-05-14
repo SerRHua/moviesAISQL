@@ -1,7 +1,7 @@
 # Movie Recommendation System (Streamlit)
 
 A movie recommendation web application built using Streamlit and Python.  
-The system allows users to search for movies using natural language input and receive genre-based recommendations derived from a structured dataset.
+The system allows users to search for movies using natural language input and receive genre-based recommendations derived from a structured dataset. It uses Streamlit as a virtual environment for user to find movies.
 
 ## Features
 
