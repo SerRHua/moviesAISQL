@@ -3,7 +3,9 @@ import sqlite3
 from scraping import get_movies_imdb, extract_genres
 from datetime import date
 
-# --- DB setup ---
+# -------------------
+# DB SETUP
+# -------------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
 
@@ -11,32 +13,38 @@ c.execute("CREATE TABLE IF NOT EXISTS users (name TEXT UNIQUE)")
 c.execute("CREATE TABLE IF NOT EXISTS movies (username TEXT, genre TEXT)")
 conn.commit()
 
-# --- session state ---
+# -------------------
+# SESSION STATE
+# -------------------
 if "name" not in st.session_state:
     st.session_state["name"] = ""
 
 if "movies" not in st.session_state:
     st.session_state["movies"] = []
 
-if "posters" not in st.session_state:
-    st.session_state["posters"] = []
-
 if "genres" not in st.session_state:
     st.session_state["genres"] = []
 
-# --- load users ---
+
+# -------------------
+# LOAD USERS
+# -------------------
 c.execute("SELECT name FROM users ORDER BY name COLLATE NOCASE ASC")
 users = [row[0] for row in c.fetchall()]
 
 if not st.session_state["name"] and users:
     st.session_state["name"] = users[0]
 
-# --- helper ---
+
+# -------------------
+# USER GENRE HISTORY
+# -------------------
 def get_user_top_genres(username):
-    c.execute("SELECT genre FROM movies WHERE username = ?", (username,))
-    rows = [row[0] for row in c.fetchall()]
+    c.execute("SELECT genre FROM movies WHERE username=?", (username,))
+    rows = [r[0] for r in c.fetchall()]
 
     freq = {}
+
     for r in rows:
         for g in extract_genres(r):
             freq[g] = freq.get(g, 0) + 1
@@ -44,96 +52,110 @@ def get_user_top_genres(username):
     return sorted(freq, key=freq.get, reverse=True)[:2]
 
 
-# --- sidebar ---
-st.sidebar.header("User Selection")
+# -------------------
+# SIDEBAR
+# -------------------
+st.sidebar.header("User")
 
-new_name = st.sidebar.text_input("Enter new user")
-selected_name = st.sidebar.selectbox("Select user", [""] + users)
-delete_name = st.sidebar.selectbox("Delete user", [""] + users)
+new_user = st.sidebar.text_input("Create user")
+selected_user = st.sidebar.selectbox("Select user", [""] + users)
+delete_user = st.sidebar.selectbox("Delete user", [""] + users)
 
-# --- delete ---
-if delete_name and st.sidebar.button("Delete Selected User"):
-    c.execute("DELETE FROM users WHERE name=?", (delete_name,))
-    c.execute("DELETE FROM movies WHERE username=?", (delete_name,))
+
+# DELETE USER
+if delete_user and st.sidebar.button("Delete"):
+    c.execute("DELETE FROM users WHERE name=?", (delete_user,))
+    c.execute("DELETE FROM movies WHERE username=?", (delete_user,))
     conn.commit()
 
-    if st.session_state["name"] == delete_name:
+    if st.session_state["name"] == delete_user:
         st.session_state["name"] = ""
         st.session_state["movies"] = []
-        st.session_state["posters"] = []
-        st.session_state["genres"] = []
 
     st.rerun()
 
-# --- create/select ---
-if new_name:
-    st.session_state["name"] = new_name
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (new_name,))
+
+# CREATE / SELECT USER
+if new_user:
+    st.session_state["name"] = new_user
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (new_user,))
     conn.commit()
 
-elif selected_name:
-    st.session_state["name"] = selected_name
+elif selected_user:
+    st.session_state["name"] = selected_user
 
-# reset UI when switching user
-st.session_state["movies"] = []
-st.session_state["posters"] = []
-st.session_state["genres"] = []
+    # reset results when switching users
+    st.session_state["movies"] = []
 
-# --- MAIN ---
+
+# -------------------
+# MAIN APP
+# -------------------
 if st.session_state["name"]:
 
-    st.title(f"Hello {st.session_state['name']}! Today is {date.today().strftime('%B %d, %Y')}")
+    st.title(f"Hello {st.session_state['name']}")
+    st.write(f"Today: {date.today().strftime('%B %d, %Y')}")
 
-    what_to_do = st.text_input("What movies do you want?")
+    user_input = st.text_input("Enter movie preference (e.g. Interstellar, funny movie)")
 
     col1, col2 = st.columns(2)
 
+    # -------------------
     # SEARCH
+    # -------------------
     if col1.button("Search"):
-        query = what_to_do.strip().lower()
+
+        query = user_input.strip().lower()
 
         c.execute("INSERT INTO movies VALUES (?,?)",
                   (st.session_state["name"], query))
         conn.commit()
 
-        genres = extract_genres(query)
-        movies, posters = get_movies_imdb(genres)
+        movies, _ = get_movies_imdb(query)
 
         st.session_state["movies"] = movies
-        st.session_state["posters"] = posters
-        st.session_state["genres"] = genres
 
+
+    # -------------------
     # RECOMMEND
+    # -------------------
     if col2.button("Recommend for me"):
+
         top_genres = get_user_top_genres(st.session_state["name"])
 
         if not top_genres:
             st.warning("No history yet")
         else:
-            movies, posters = get_movies_imdb(top_genres)
+            query = " ".join(top_genres)
+
+            movies, _ = get_movies_imdb(query)
 
             st.session_state["movies"] = movies
-            st.session_state["posters"] = posters
-            st.session_state["genres"] = top_genres
 
-    # RESULTS
-    st.subheader("Recommended Movies")
 
-    for movie in st.session_state["movies"]:
-        with st.container():
-            st.markdown(f"""
-            ### 🎬 {movie['title']}
-            **Year:** {movie['year']}
-            ---
-            """)
+    # -------------------
+    # DISPLAY RESULTS
+    # -------------------
+    if st.session_state["movies"]:
 
+        st.subheader("Recommendations")
+
+        for movie in st.session_state["movies"]:
+            st.markdown(f"### {movie['title']}")
+            st.write(movie.get("year", ""))
+            st.markdown("---")
+
+
+    # -------------------
     # HISTORY
+    # -------------------
     st.subheader("History")
+
     c.execute("SELECT genre FROM movies WHERE username=?", (st.session_state["name"],))
     for row in c.fetchall():
         st.write(row[0])
 
 else:
-    st.title("Welcome! Create or select a user from sidebar")
+    st.title("Create or select a user from the sidebar")
 
 conn.close()
