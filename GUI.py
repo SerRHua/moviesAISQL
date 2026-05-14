@@ -1,7 +1,8 @@
 import streamlit as st
 import sqlite3
-from scraping import get_movies_imdb, extract_genres
 from datetime import date
+
+from agent import movie_agent, smart_recommend
 
 # -------------------
 # DB SETUP
@@ -22,48 +23,39 @@ if "name" not in st.session_state:
 if "movies" not in st.session_state:
     st.session_state["movies"] = []
 
-if "genres" not in st.session_state:
-    st.session_state["genres"] = []
-
 
 # -------------------
 # LOAD USERS
 # -------------------
-c.execute("SELECT name FROM users ORDER BY name COLLATE NOCASE ASC")
-users = [row[0] for row in c.fetchall()]
-
-if not st.session_state["name"] and users:
-    st.session_state["name"] = users[0]
+c.execute("SELECT name FROM users ORDER BY name")
+users = [r[0] for r in c.fetchall()]
 
 
 # -------------------
-# USER GENRE HISTORY
+# SIDEBAR - USER MANAGEMENT
 # -------------------
-def get_user_top_genres(username):
-    c.execute("SELECT genre FROM movies WHERE username=?", (username,))
-    rows = [r[0] for r in c.fetchall()]
-
-    freq = {}
-
-    for r in rows:
-        for g in extract_genres(r):
-            freq[g] = freq.get(g, 0) + 1
-
-    return sorted(freq, key=freq.get, reverse=True)[:2]
-
-
-# -------------------
-# SIDEBAR
-# -------------------
-st.sidebar.header("User")
+st.sidebar.header("User Management")
 
 new_user = st.sidebar.text_input("Create user")
 selected_user = st.sidebar.selectbox("Select user", [""] + users)
-delete_user = st.sidebar.selectbox("Delete user", [""] + users)
+delete_user = st.sidebar.selectbox("Delete user", ["None"] + users)
+
+
+# CREATE USER
+if new_user:
+    st.session_state["name"] = new_user
+    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (new_user,))
+    conn.commit()
+
+
+# SELECT USER
+elif selected_user:
+    st.session_state["name"] = selected_user
 
 
 # DELETE USER
-if delete_user and st.sidebar.button("Delete"):
+if delete_user != "None" and st.sidebar.button("Delete user"):
+
     c.execute("DELETE FROM users WHERE name=?", (delete_user,))
     c.execute("DELETE FROM movies WHERE username=?", (delete_user,))
     conn.commit()
@@ -72,20 +64,8 @@ if delete_user and st.sidebar.button("Delete"):
         st.session_state["name"] = ""
         st.session_state["movies"] = []
 
+    st.sidebar.success(f"Deleted {delete_user}")
     st.rerun()
-
-
-# CREATE / SELECT USER
-if new_user:
-    st.session_state["name"] = new_user
-    c.execute("INSERT OR IGNORE INTO users VALUES (?)", (new_user,))
-    conn.commit()
-
-elif selected_user:
-    st.session_state["name"] = selected_user
-
-    # reset results when switching users
-    st.session_state["movies"] = []
 
 
 # -------------------
@@ -93,44 +73,43 @@ elif selected_user:
 # -------------------
 if st.session_state["name"]:
 
-    st.title(f"Hello {st.session_state['name']}")
+    st.title(f"Movie Agent - {st.session_state['name']}")
     st.write(f"Today: {date.today().strftime('%B %d, %Y')}")
 
-    user_input = st.text_input("Enter movie preference (e.g. Interstellar, funny movie)")
+    user_input = st.text_input("Search movies (e.g. Interstellar, like Interstellar)")
 
     col1, col2 = st.columns(2)
 
+
     # -------------------
-    # SEARCH
+    # SEARCH (MCP AGENT)
     # -------------------
-    if col1.button("Search"):
+    if col1.button("Search") and user_input:
 
-        query = user_input.strip().lower()
-
-        c.execute("INSERT INTO movies VALUES (?,?)",
-                  (st.session_state["name"], query))
-        conn.commit()
-
-        movies, _ = get_movies_imdb(query)
+        movies, _ = movie_agent(user_input)
 
         st.session_state["movies"] = movies
 
+        c.execute("INSERT INTO movies VALUES (?,?)",
+                  (st.session_state["name"], user_input))
+        conn.commit()
+
 
     # -------------------
-    # RECOMMEND
+    # RECOMMEND (SMART SYSTEM)
     # -------------------
     if col2.button("Recommend for me"):
 
-        top_genres = get_user_top_genres(st.session_state["name"])
+        c.execute("SELECT genre FROM movies WHERE username=?",
+                  (st.session_state["name"],))
 
-        if not top_genres:
-            st.warning("No history yet")
-        else:
-            query = " ".join(top_genres)
+        history = [r[0] for r in c.fetchall()]
 
-            movies, _ = get_movies_imdb(query)
-
+        if history:
+            movies = smart_recommend(history)
             st.session_state["movies"] = movies
+        else:
+            st.warning("No history yet")
 
 
     # -------------------
@@ -138,11 +117,11 @@ if st.session_state["name"]:
     # -------------------
     if st.session_state["movies"]:
 
-        st.subheader("Recommendations")
+        st.subheader("Results")
 
-        for movie in st.session_state["movies"]:
-            st.markdown(f"### {movie['title']}")
-            st.write(movie.get("year", ""))
+        for m in st.session_state["movies"]:
+            st.markdown(f"### {m['title']}")
+            st.write(m.get("year", ""))
             st.markdown("---")
 
 
@@ -151,9 +130,11 @@ if st.session_state["name"]:
     # -------------------
     st.subheader("History")
 
-    c.execute("SELECT genre FROM movies WHERE username=?", (st.session_state["name"],))
-    for row in c.fetchall():
-        st.write(row[0])
+    c.execute("SELECT genre FROM movies WHERE username=?",
+              (st.session_state["name"],))
+
+    for r in c.fetchall():
+        st.write(r[0])
 
 else:
     st.title("Create or select a user from the sidebar")
