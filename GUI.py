@@ -44,6 +44,7 @@ delete_user = st.sidebar.selectbox("Delete user", ["None"] + users)
 # CREATE USER
 if new_user:
     st.session_state["name"] = new_user
+    st.session_state["movies"] = []
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (new_user,))
     conn.commit()
 
@@ -51,6 +52,8 @@ if new_user:
 # SELECT USER
 elif selected_user:
     st.session_state["name"] = selected_user
+    st.session_state["movies"] = []
+    conn.commit()
 
 
 # DELETE USER
