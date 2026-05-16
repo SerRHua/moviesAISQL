@@ -117,10 +117,6 @@ def get_movies_imdb(query, max_results=20):
             for g in matched_movie.get("genres", [])
         ]
 
-        print("Matched:", matched_movie["title"])
-        print("Year:", matched_movie["year"])
-        print("Genres:", target_genres)
-
     # no genres found
     if not target_genres:
 

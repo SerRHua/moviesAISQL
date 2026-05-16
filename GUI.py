@@ -23,13 +23,11 @@ if "name" not in st.session_state:
 if "movies" not in st.session_state:
     st.session_state["movies"] = []
 
-
 # -------------------
 # LOAD USERS
 # -------------------
 c.execute("SELECT name FROM users ORDER BY name")
 users = [r[0] for r in c.fetchall()]
-
 
 # -------------------
 # SIDEBAR - USER MANAGEMENT
@@ -40,7 +38,6 @@ new_user = st.sidebar.text_input("Create user")
 selected_user = st.sidebar.selectbox("Select user", [""] + users)
 delete_user = st.sidebar.selectbox("Delete user", ["None"] + users)
 
-
 # CREATE USER
 if new_user:
     st.session_state["name"] = new_user
@@ -48,13 +45,10 @@ if new_user:
     c.execute("INSERT OR IGNORE INTO users VALUES (?)", (new_user,))
     conn.commit()
 
-
 # SELECT USER
 elif selected_user:
     st.session_state["name"] = selected_user
     st.session_state["movies"] = []
-    conn.commit()
-
 
 # DELETE USER
 if delete_user != "None" and st.sidebar.button("Delete user"):
@@ -70,7 +64,6 @@ if delete_user != "None" and st.sidebar.button("Delete user"):
     st.sidebar.success(f"Deleted {delete_user}")
     st.rerun()
 
-
 # -------------------
 # MAIN APP
 # -------------------
@@ -79,10 +72,25 @@ if st.session_state["name"]:
     st.title(f"Movie Agent - {st.session_state['name']}")
     st.write(f"Today: {date.today().strftime('%B %d, %Y')}")
 
-    user_input = st.text_input("Search movies (e.g. Interstellar, like Interstellar)")
+    # -------------------
+    # TOP BAR (CLEAR HISTORY BUTTON)
+    # -------------------
+    top_left, top_right = st.columns([8, 2])
 
+    with top_right:
+        if st.button("Clear history"):
+            c.execute(
+                "DELETE FROM movies WHERE username=?",
+                (st.session_state["name"],)
+            )
+            conn.commit()
+
+            st.session_state["movies"] = []
+            st.success("History cleared")
+            st.rerun()
+
+    user_input = st.text_input("Search movies")
     col1, col2 = st.columns(2)
-
 
     # -------------------
     # SEARCH (MCP AGENT)
@@ -93,18 +101,21 @@ if st.session_state["name"]:
 
         st.session_state["movies"] = movies
 
-        c.execute("INSERT INTO movies VALUES (?,?)",
-                  (st.session_state["name"], user_input))
+        c.execute(
+            "INSERT INTO movies VALUES (?,?)",
+            (st.session_state["name"], user_input)
+        )
         conn.commit()
-
 
     # -------------------
     # RECOMMEND (SMART SYSTEM)
     # -------------------
     if col2.button("Recommend for me"):
 
-        c.execute("SELECT genre FROM movies WHERE username=?",
-                  (st.session_state["name"],))
+        c.execute(
+            "SELECT genre FROM movies WHERE username=?",
+            (st.session_state["name"],)
+        )
 
         history = [r[0] for r in c.fetchall()]
 
@@ -113,7 +124,6 @@ if st.session_state["name"]:
             st.session_state["movies"] = movies
         else:
             st.warning("No history yet")
-
 
     # -------------------
     # DISPLAY RESULTS
@@ -127,14 +137,15 @@ if st.session_state["name"]:
             st.write(m.get("year", ""))
             st.markdown("---")
 
-
     # -------------------
     # HISTORY
     # -------------------
     st.subheader("History")
 
-    c.execute("SELECT genre FROM movies WHERE username=?",
-              (st.session_state["name"],))
+    c.execute(
+        "SELECT genre FROM movies WHERE username=?",
+        (st.session_state["name"],)
+    )
 
     for r in c.fetchall():
         st.write(r[0])
