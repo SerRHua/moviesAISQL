@@ -1,7 +1,11 @@
 import requests
+from difflib import get_close_matches
 
 BASE_URL = "https://raw.githubusercontent.com/prust/wikipedia-movie-data/master/movies.json"
 
+# -----------------------------
+# MAIN GENRES
+# -----------------------------
 GENRES = [
     "action",
     "adventure",
@@ -17,33 +21,194 @@ GENRES = [
     "mystery"
 ]
 
+# -----------------------------
+# GENRE SYNONYMS
+# -----------------------------
 GENRE_SYNONYMS = {
+
+    # ACTION
+    "superhero": "action",
+    "heroes": "action",
+    "hero": "action",
+    "fight": "action",
+    "fighting": "action",
+    "war": "action",
+    "battle": "action",
+    "explosion": "action",
+    "guns": "action",
+    "martial arts": "action",
+    "marvel": "action",
+    "dc": "action",
+
+    # ADVENTURE
+    "journey": "adventure",
+    "explore": "adventure",
+    "exploration": "adventure",
+    "quest": "adventure",
+    "treasure": "adventure",
+    "survival": "adventure",
+
+    # ANIMATION
+    "cartoon": "animation",
+    "animated": "animation",
+    "pixar": "animation",
+    "disney": "animation",
+
+    # COMEDY
     "funny": "comedy",
-    "scary": "horror",
-    "romantic": "romance",
-    "space": "sci-fi",
-    "suspense": "thriller",
+    "humor": "comedy",
+    "hilarious": "comedy",
+    "laugh": "comedy",
+    "parody": "comedy",
+
+    # CRIME
     "detective": "crime",
-    "superhero": "action"
+    "mafia": "crime",
+    "gangster": "crime",
+    "police": "crime",
+    "murder": "crime",
+    "heist": "crime",
+    "criminal": "crime",
+
+    # DRAMA
+    "emotional": "drama",
+    "sad": "drama",
+    "serious": "drama",
+    "life": "drama",
+    "family": "drama",
+
+    # FANTASY
+    "magic": "fantasy",
+    "dragon": "fantasy",
+    "wizard": "fantasy",
+    "kingdom": "fantasy",
+    "myth": "fantasy",
+    "fairy": "fantasy",
+
+    # HORROR
+    "scary": "horror",
+    "ghost": "horror",
+    "monster": "horror",
+    "zombie": "horror",
+    "haunted": "horror",
+    "demon": "horror",
+
+    # ROMANCE
+    "romantic": "romance",
+    "love": "romance",
+    "dating": "romance",
+    "relationship": "romance",
+    "couple": "romance",
+
+    # SCI-FI
+    "space": "sci-fi",
+    "future": "sci-fi",
+    "alien": "sci-fi",
+    "robot": "sci-fi",
+    "cyberpunk": "sci-fi",
+    "technology": "sci-fi",
+    "time travel": "sci-fi",
+
+    # THRILLER
+    "suspense": "thriller",
+    "tense": "thriller",
+    "psychological": "thriller",
+    "mind game": "thriller",
+    "spy": "thriller",
+
+    # MYSTERY
+    "investigation": "mystery",
+    "clues": "mystery",
+    "unknown": "mystery",
+    "whodunit": "mystery"
+}
+
+# -----------------------------
+# FRANCHISE KEYWORDS
+# -----------------------------
+FRANCHISE_KEYWORDS = {
+
+    "marvel": [
+        "avengers",
+        "iron man",
+        "thor",
+        "spider-man",
+        "captain america",
+        "guardians",
+        "doctor strange",
+        "black panther",
+        "hulk",
+        "ant-man"
+    ],
+
+    "dc": [
+        "batman",
+        "superman",
+        "joker",
+        "wonder woman",
+        "flash",
+        "aquaman"
+    ],
+
+    "star wars": [
+        "star wars"
+    ],
+
+    "harry potter": [
+        "harry potter",
+        "fantastic beasts"
+    ]
 }
 
 
+# -----------------------------
+# EXTRACT GENRES
+# -----------------------------
 def extract_genres(query: str):
 
     q = query.lower()
     found = set()
 
+    # direct genre matching
     for g in GENRES:
         if g in q:
             found.add(g)
 
-    for k, v in GENRE_SYNONYMS.items():
-        if k in q:
-            found.add(v)
+    # synonym matching
+    for synonym, genre in GENRE_SYNONYMS.items():
+        if synonym in q:
+            found.add(genre)
+
+    # fuzzy matching
+    all_words = list(GENRE_SYNONYMS.keys()) + GENRES
+
+    for word in q.split():
+
+        matches = get_close_matches(
+            word,
+            all_words,
+            n=1,
+            cutoff=0.75
+        )
+
+        if matches:
+
+            matched = matches[0]
+
+            if matched in GENRES:
+                found.add(matched)
+
+            elif matched in GENRE_SYNONYMS:
+                found.add(
+                    GENRE_SYNONYMS[matched]
+                )
 
     return list(found)
 
 
+# -----------------------------
+# MAIN MOVIE FUNCTION
+# -----------------------------
 def get_movies_imdb(query, max_results=20):
 
     if isinstance(query, list):
@@ -52,26 +217,42 @@ def get_movies_imdb(query, max_results=20):
     query_lower = query.lower().strip()
 
     # -----------------------------
-    # LOAD MOVIE DATA
+    # LOAD DATA
     # -----------------------------
-    data = requests.get(BASE_URL, timeout=10).json()
+    data = requests.get(
+        BASE_URL,
+        timeout=10
+    ).json()
+
+    # -----------------------------
+    # FIND FRANCHISE
+    # -----------------------------
+    matched_franchise = None
+
+    for franchise in FRANCHISE_KEYWORDS:
+
+        if franchise in query_lower:
+            matched_franchise = franchise
+            break
 
     # -----------------------------
     # FIND MOVIE TITLE
     # -----------------------------
     matched_movie = None
 
-    # exact title matches
+    # exact title matching
     exact_matches = []
 
     for m in data:
 
-        title = m.get("title", "").lower().strip()
+        title = m.get(
+            "title",
+            ""
+        ).lower().strip()
 
         if title == query_lower:
             exact_matches.append(m)
 
-    # choose newest exact match
     if exact_matches:
 
         matched_movie = max(
@@ -79,24 +260,24 @@ def get_movies_imdb(query, max_results=20):
             key=lambda x: x.get("year", 0)
         )
 
-    # partial title matches
+    # partial matching
     if not matched_movie:
 
         partial_matches = []
 
         for m in data:
 
-            title = m.get("title", "").lower().strip()
+            title = m.get(
+                "title",
+                ""
+            ).lower().strip()
 
-            # ignore tiny titles like "Ma"
             if len(title) < 4:
                 continue
 
-            # exact phrase matching
             if f" {title} " in f" {query_lower} ":
                 partial_matches.append(m)
 
-        # choose newest match
         if partial_matches:
 
             matched_movie = max(
@@ -105,7 +286,7 @@ def get_movies_imdb(query, max_results=20):
             )
 
     # -----------------------------
-    # GET TARGET GENRES
+    # TARGET GENRES
     # -----------------------------
     target_genres = extract_genres(query)
 
@@ -114,11 +295,20 @@ def get_movies_imdb(query, max_results=20):
 
         target_genres = [
             g.lower()
-            for g in matched_movie.get("genres", [])
+            for g in matched_movie.get(
+                "genres",
+                []
+            )
         ]
 
-    # no genres found
-    if not target_genres:
+        print("\nMatched:", matched_movie["title"])
+        print("Year:", matched_movie.get("year"))
+        print("Genres:", target_genres)
+
+    # -----------------------------
+    # NO GENRES FOUND
+    # -----------------------------
+    if not target_genres and not matched_franchise:
 
         return [{
             "title": "No movies found",
@@ -139,58 +329,78 @@ def get_movies_imdb(query, max_results=20):
         if matched_movie and title == matched_movie["title"]:
             continue
 
+        title_lower = title.lower()
+
         movie_genres = [
             g.lower()
             for g in m.get("genres", [])
         ]
 
         overlap = len(
-            set(movie_genres) & set(target_genres)
+            set(movie_genres) &
+            set(target_genres)
         )
-
-        # require at least 1 shared genre
-        if overlap < 1:
-            continue
 
         year = m.get("year", 0)
 
-        # remove ancient movies
+        # skip old movies
         if isinstance(year, int) and year < 1980:
             continue
 
+        # require either:
+        # genre overlap OR franchise match
+        if overlap < 1 and not matched_franchise:
+            continue
+
         # -----------------------------
-        # SCORING
+        # BASE SCORE
         # -----------------------------
         score = overlap * 100
 
-        title_lower = title.lower()
+        # -----------------------------
+        # FRANCHISE BOOST
+        # -----------------------------
+        if matched_franchise:
 
-        # boost superhero/action titles
-        boost_words = [
-            "man",
-            "avengers",
-            "marvel",
-            "captain",
-            "thor",
-            "spider",
-            "guardian",
-            "robot",
-            "future",
-            "iron"
-        ]
+            keywords = FRANCHISE_KEYWORDS[
+                matched_franchise
+            ]
 
-        for word in boost_words:
+            for keyword in keywords:
+
+                if keyword in title_lower:
+                    score += 1000
+
+        # -----------------------------
+        # SMART TITLE BOOSTS
+        # -----------------------------
+        boost_words = {
+            "avengers": 300,
+            "marvel": 250,
+            "thor": 400,
+            "spider-man": 400,
+            "iron man": 400,
+            "captain america": 350,
+            "guardian": 200,
+            "matrix": 300,
+            "mission impossible": 300,
+            "batman": 400,
+            "superman": 350
+        }
+
+        for word, points in boost_words.items():
+
             if word in title_lower:
-                score += 200
+                score += points
 
-        # prefer newer movies
+        # newer movies preferred
         if isinstance(year, int):
             score += year
 
         scored.append((score, m))
 
     # -----------------------------
-    # SORT BEST MATCHES
+    # SORT RESULTS
     # -----------------------------
     scored.sort(
         key=lambda x: x[0],
@@ -198,7 +408,7 @@ def get_movies_imdb(query, max_results=20):
     )
 
     # -----------------------------
-    # BUILD FINAL RESULTS
+    # FINAL RESULTS
     # -----------------------------
     results = []
     seen = set()
