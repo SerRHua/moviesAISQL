@@ -420,13 +420,26 @@ def get_movies_imdb(query, max_results=20):
         if title in seen:
             continue
 
+        imdb_link = (
+            "https://www.imdb.com/find?q="
+            + title.replace(" ", "+")
+        )
+
+        trailer_link = (
+            "https://www.youtube.com/results?search_query="
+            + title.replace(" ", "+")
+            + "+official+trailer"
+        )
+
         results.append({
             "title": title,
             "year": m.get("year", ""),
             "genres": [
                 g.lower()
                 for g in m.get("genres", [])
-            ]
+            ],
+            "imdb": imdb_link,
+            "trailer": trailer_link
         })
 
         seen.add(title)

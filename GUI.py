@@ -133,8 +133,25 @@ if st.session_state["name"]:
         st.subheader("Results")
 
         for m in st.session_state["movies"]:
-            st.markdown(f"### {m['title']}")
-            st.write(m.get("year", ""))
+
+            st.markdown(
+                f"### [{m['title']}]({m['imdb']})"
+            )
+
+            st.write(
+                f"Year: {m.get('year', '')}"
+            )
+
+            if m.get("genres"):
+                st.write(
+                    "Genres:",
+                    ", ".join(m["genres"])
+                )
+
+            st.markdown(
+                f"[Watch Trailer]({m['trailer']})"
+            )
+
             st.markdown("---")
 
     # -------------------
